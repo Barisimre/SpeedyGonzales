@@ -38,15 +38,15 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
     private fun processTransaction(hash: String) {
         val request = Request("txpool_content", emptyList<String>(),  webSocketService, EthCall::class.java)
         val result = httpService.send(request, Response::class.java)
-        val details = result.getTransactionDetails(hash)
-        if (details != null && details.contract == Config.v2router) {
-            // Bingo, a sushi-swap transaction
-            println("bingo: ${details.method}, ${Config.v2method}")
-
-            if (details.method == Config.v2method) return
-            val path = details.path
-            if (path.first() == path.last() && details.amountIn < details.minAmountOut) {
-                println("Profitable trade found!!!!! hash: $hash:\n $details")
+        val details = result.getTransactionDetails()
+        for (transaction in details) {
+            if (transaction.contract.lowercase() == Config.v2router.lowercase()) {
+                // Bingo, a sushi-swap transaction
+                if (transaction.method != Config.v2method) return
+                val path = transaction.path
+                if (path.first() == path.last() && transaction.amountIn < transaction.minAmountOut) {
+                    println("Profitable trade found!!!!! hash: $hash:\n $transaction")
+                }
             }
         }
     }
@@ -56,24 +56,26 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
         subscribeTransactions()
     }
 
-    fun Response<*>.getTransactionDetails(transaction: String): Transaction? {
+    fun Response<*>.getTransactionDetails(): List<Transaction> {
         val pending = (this.result as LinkedHashMap<*, *>)["pending"]
-
+        val result = ArrayList<Transaction>()
         for (pendingTransaction in (pending as LinkedHashMap<*, *>).values) {
             val transactionData = (pendingTransaction as LinkedHashMap<*, *>).values.first() as LinkedHashMap<*, *>
             try {
-                if ((transactionData["hash"] as String) != transaction) continue
-                return Transaction(
+                result.add(Transaction(
                     from = transactionData["from"] as String,
                     contract = transactionData["to"] as String,
                     input = transactionData["input"] as String,
                     gasPrice = transactionData["gasPrice"] as String
-                )
+                ))
             } catch (e: Exception) {
+//                println(transactionData)
+//                println(e)
+//                e.printStackTrace()
                 continue
             }
         }
-        return null
+        return result
     }
 
 }
