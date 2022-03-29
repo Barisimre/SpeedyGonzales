@@ -44,8 +44,8 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
                 // Bingo, a sushi-swap transaction
 
                 if (transaction.method != Config.v2method) return
-//                println("bingo: in: ${transaction.amountIn} out: ${transaction.minAmountOut}, path: ${transaction.path}, input: ${transaction.input}, path arrray: ${transaction.body.substring(4*64)}")
                 val path = transaction.path
+//                println(transaction.path.associate { it.toString(16) to  Config.tokens[it.toString(16)] })
                 if (path.first() == path.last() && transaction.amountIn < transaction.minAmountOut) {
                     println("Profitable trade found!!!!! hash: $hash:\n $transaction")
                 }
