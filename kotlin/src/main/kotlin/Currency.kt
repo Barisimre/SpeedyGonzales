@@ -4,6 +4,15 @@ enum class Currency {
     CEUR,
     WETH,
     SUSHI,
+    mCUSD,
+    mCEUR,
+    FTM,
+    AVAX,
+    DAI,
+    SOL,
+    BNB,
+    USDT,
+
 }
 
 fun String.toCurrency(): Currency {
