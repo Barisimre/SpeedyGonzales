@@ -38,7 +38,7 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
     private fun processTransaction(hash: String) {
         val request = Request("txpool_content", emptyList<String>(),  webSocketService, EthCall::class.java)
         val result = httpService.send(request, Response::class.java)
-        val details = result.getTransactionDetails()
+        val details = result.getTransactionDetails(hash)
         for (transaction in details) {
             if (transaction.contract.lowercase() == Config.v2router.lowercase()) {
                 // Bingo, a sushi-swap transaction
@@ -58,11 +58,13 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
         subscribeTransactions()
     }
 
-    fun Response<*>.getTransactionDetails(): List<Transaction> {
+    fun Response<*>.getTransactionDetails(transactionHash: String): List<Transaction> {
         val pending = (this.result as LinkedHashMap<*, *>)["pending"]
         val result = ArrayList<Transaction>()
         for (pendingTransaction in (pending as LinkedHashMap<*, *>).values) {
             val transactionData = (pendingTransaction as LinkedHashMap<*, *>).values.first() as LinkedHashMap<*, *>
+            println("$transactionHash, ${transactionData["hash"]}")
+            if (transactionData["hash"] != transactionHash) continue
             try {
                 result.add(Transaction(
                     from = transactionData["from"] as String,
