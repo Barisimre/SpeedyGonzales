@@ -63,7 +63,6 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
         val result = ArrayList<Transaction>()
         for (pendingTransaction in (pending as LinkedHashMap<*, *>).values) {
             val transactionData = (pendingTransaction as LinkedHashMap<*, *>).values.first() as LinkedHashMap<*, *>
-            println("$transactionHash, ${transactionData["hash"]}")
             if (transactionData["hash"] != transactionHash) continue
             try {
                 result.add(Transaction(
