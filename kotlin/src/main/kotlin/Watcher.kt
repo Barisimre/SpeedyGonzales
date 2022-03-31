@@ -87,7 +87,7 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
         transaction.replaceAmountIn(ownInBalance)
 
         println(transaction.gasPrice)
-        val gasPrice = transaction.gasPrice.substring(2).toBigInteger(16) + 0.toBigInteger()
+        val gasPrice = transaction.gasPrice.substring(2).toBigInteger(16) + 100000000.toBigInteger()
 
         val trans = org.web3j.protocol.core.methods.request.Transaction(
             Config.address,
@@ -106,7 +106,7 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
         println("call: ${call.method}, ${call.params.map {it.toString()}}")
         val result = call.send()
 
-        println(result.error)
+        println(result.error.message)
     }
 
     fun run() {
