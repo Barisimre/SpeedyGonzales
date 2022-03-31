@@ -1,6 +1,6 @@
 import java.math.BigInteger
 
-data class BaseTransaction(val from: String, val to: String, val input: String, val gasPrice: String, val hash: String) {
+data class BaseTransaction(val from: String, val to: String, val input: String, val gasPrice: String, val hash: String, val gasAmount: String) {
     val method
         get() = input.substring(0, 10)
 }
@@ -10,6 +10,7 @@ class Transaction(transaction: BaseTransaction) {
     val contract = transaction.to
     val from = transaction.from
     val gasPrice = transaction.gasPrice
+    val gasAmount = transaction.gasAmount
 
 
     val method
@@ -42,5 +43,10 @@ class Transaction(transaction: BaseTransaction) {
     fun replaceAmountIn(amountIn: BigInteger) {
         val inputString = amountIn.toString(16).padStart(64, '0')
         input = input.substring(0, 10) + inputString + input.substring(10 + 64)
+    }
+
+    fun replaceAmountOut(minAmountOut: BigInteger) {
+        val inputString = minAmountOut.toString(16).padStart(64, '0')
+        input = input.substring(0, 10 + 64) + inputString + input.substring(10 + 2*64)
     }
 }

@@ -1,11 +1,14 @@
 
 import org.web3j.contracts.eip20.generated.ERC20
 import org.web3j.crypto.Credentials
+import org.web3j.crypto.RawTransaction
+import org.web3j.crypto.TransactionEncoder
 import org.web3j.protocol.Web3j
 import org.web3j.protocol.core.DefaultBlockParameter
 import org.web3j.protocol.core.Request
 import org.web3j.protocol.core.Response
 import org.web3j.protocol.core.methods.response.EthCall
+import org.web3j.protocol.core.methods.response.EthSendTransaction
 import org.web3j.protocol.core.methods.response.EthSubscribe
 import org.web3j.protocol.http.HttpService
 
@@ -78,16 +81,23 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
         val inToken = transaction.path.first()
         val erc20 = ERC20Tokens["0x" + inToken.toString(16)] ?: throw Exception("Value was null for token: 0x${inToken.toString(16)}")
         println(Config.address)
-        val ownInBalance = erc20.balanceOf(Config.address).send() / 2.toBigInteger()
+        val ownInBalance = minOf(erc20.balanceOf(Config.address).send() / 2.toBigInteger(), transaction.amountIn)
+        val minOut = (ownInBalance * transaction.minAmountOut) / (transaction.amountIn)
+        println("our in: $ownInBalance, our out: $minOut, their in: ${transaction.amountIn} their out: ${transaction.minAmountOut}")
+
         println("Path in: ${Config.tokens["0x" + inToken.toString(16)]}, amount: $ownInBalance, \n${transaction.path.map { Config.tokens["0x" + it.toString(16)] }}")
 
         if (ownInBalance <= 0.toBigInteger()) return
 
         transaction.replaceTo(Config.address.substring(2))
         transaction.replaceAmountIn(ownInBalance)
+        transaction.replaceAmountOut(minOut)
+
+        if (minOut <= 0.toBigInteger()) throw Exception("Minout is zero")
 
         println(transaction.gasPrice)
         val gasPrice = transaction.gasPrice.substring(2).toBigInteger(16) + 100000000.toBigInteger()
+        val gasAmount = transaction.gasAmount.substring(2).toBigInteger(16) * 2.toBigInteger()
 
         val trans = org.web3j.protocol.core.methods.request.Transaction(
             Config.address,
@@ -99,14 +109,16 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
             transaction.input,
         )
 
+
         println("input string: ${transaction.input}")
 
         println("executing ethCall: ${Instant.now()}")
-        val call = web3j.ethCall(trans, DefaultBlockParameter.valueOf("latest"))
-        println("call: ${call.method}, ${call.params.map {it.toString()}}")
-        val result = call.send()
 
-        println(result.error.message)
+
+//        val call = web3j.ethCall(trans, DefaultBlockParameter.valueOf("latest"))
+        val result = transactionManager.sendTransaction(gasPrice, gasAmount, transaction.contract, transaction.input, null)
+        println(result.error?.message)
+
     }
 
     fun run() {
@@ -126,6 +138,7 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
                     to = transactionData["to"] as String,
                     input = transactionData["input"] as String,
                     gasPrice = transactionData["gasPrice"] as String,
+                    gasAmount = transactionData["gas"] as String,
                     hash = transactionData["hash"] as String
                 ))
             } catch (e: Exception) {
