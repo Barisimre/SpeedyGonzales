@@ -49,4 +49,13 @@ class Transaction(transaction: BaseTransaction) {
         val inputString = minAmountOut.toString(16).padStart(64, '0')
         input = input.substring(0, 10 + 64) + inputString + input.substring(10 + 2*64)
     }
+
+    fun getPrettyInputString(): String {
+        return "\t\t${method}\n" +
+                "\t\t${amountIn}\n" +
+                "\t\t${minAmountOut}\n" +
+                "\t\t${to}\n" +
+                "\t\t${deadline}\n" +
+                "\t\t$path"
+    }
 }

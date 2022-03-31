@@ -1,17 +1,11 @@
-
 import org.web3j.contracts.eip20.generated.ERC20
 import org.web3j.crypto.Credentials
-import org.web3j.crypto.RawTransaction
-import org.web3j.crypto.TransactionEncoder
 import org.web3j.protocol.Web3j
-import org.web3j.protocol.core.DefaultBlockParameter
 import org.web3j.protocol.core.Request
 import org.web3j.protocol.core.Response
 import org.web3j.protocol.core.methods.response.EthCall
-import org.web3j.protocol.core.methods.response.EthSendTransaction
 import org.web3j.protocol.core.methods.response.EthSubscribe
 import org.web3j.protocol.http.HttpService
-
 import org.web3j.protocol.websocket.WebSocketService
 import org.web3j.protocol.websocket.events.NewHeadsNotification
 import org.web3j.protocol.websocket.events.PendingTransactionNotification
@@ -22,70 +16,69 @@ import org.web3j.utils.Numeric
 import java.math.BigInteger
 import java.time.Instant
 
-
 class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketService) {
-    val httpService = HttpService(Config.rpc)
 
-
+    private val httpService = HttpService(Config.rpc)
     private val privateKey = System.getProperty("CELO_PRIVATE_KEY")
     private val credentials = Credentials.create(privateKey)
     private val gasProvider = StaticGasProvider(BigInteger.valueOf(4_100_000_000L), BigInteger.valueOf(800_000)) // gasPrice, gasLimit
     private val transactionManager = FastRawTransactionManager(web3j, credentials, PollingTransactionReceiptProcessor(web3j,100, 150))
-    val ERC20Tokens = Config.tokens.map { it.key to ERC20.load(it.key, web3j, transactionManager, gasProvider) }.toMap()
+    private val ERC20Tokens = Config.tokens.map { it.key to ERC20.load(it.key, web3j, transactionManager, gasProvider) }.toMap()
 
-    private fun subscribeBlocks() {
-        val request = Request("eth_subscribe", listOf("newHeads"), webSocketService, EthSubscribe::class.java)
-        val events = webSocketService.subscribe(request, "eth_unsubscribe", NewHeadsNotification::class.java)
-        events.subscribe { event ->
-            val hexNumber = Numeric.hexStringToByteArray(event.params.result.number)
-            println(BigInteger(hexNumber))
-        }
-    }
 
     private fun subscribeTransactions() {
         val request = Request("eth_subscribe", listOf("newPendingTransactions"), webSocketService, EthSubscribe::class.java)
         val events = webSocketService.subscribe(request, "eth_unsubscribe", PendingTransactionNotification::class.java)
         events.subscribe { event ->
             processTransaction(event.params.result)
-//            val hexNumber = Numeric.hexStringToByteArray(event.params.result.number)
-//            println(BigInteger(hexNumber))
         }
     }
 
+
     private fun processTransaction(hash: String) {
+
         val newTransactionTiming = Instant.now()
         val request = Request("txpool_content", emptyList<String>(),  webSocketService, EthCall::class.java)
         val result = httpService.send(request, Response::class.java)
         val details = result.getTransactionDetails(hash)
         for (transaction in details) {
 
+            // Get rid of transactions that are not by the target addresses
             if (transaction.from !in Config.allowedTargets) continue
-            println("hash: ${transaction.hash} to: ${transaction.to}")
-
-//            Try to emulate the transaction
-
 
             if (transaction.to.lowercase() in Config.v2routers) {
                 // Bingo, a sushi-swap transaction
-                if (transaction.method != Config.v2method) continue
-                println("new transaction hash came in at: $newTransactionTiming")
-                println("Right method")
-                frontRunTransaction(Transaction(transaction))
 
+                // Different method in the contract, we pass
+                if (transaction.method != Config.v2method) continue
+
+                println("--------------------------------------------------------------")
+                println("Transaction with the right method at $newTransactionTiming.\n" +
+                        "\t Hash: ${transaction.hash}\n" +
+                        "\t By: ${transaction.from}\n" +
+                        "\t To: ${transaction.to}\n")
+
+                frontRunTransaction(Transaction(transaction))
             }
         }
     }
 
+
     private fun frontRunTransaction(transaction: Transaction) {
-        println("Starting frontrun: ${Instant.now()}")
+        println("\tStarting frontrun: ${Instant.now()}\n")
         val inToken = transaction.path.first()
+
         val erc20 = ERC20Tokens["0x" + inToken.toString(16)] ?: throw Exception("Value was null for token: 0x${inToken.toString(16)}")
-        println(Config.address)
+
         val ownInBalance = minOf(erc20.balanceOf(Config.address).send() / 2.toBigInteger(), transaction.amountIn)
         val minOut = (ownInBalance * transaction.minAmountOut) / (transaction.amountIn)
-        println("our in: $ownInBalance, our out: $minOut, their in: ${transaction.amountIn} their out: ${transaction.minAmountOut}")
 
-        println("Path in: ${Config.tokens["0x" + inToken.toString(16)]}, amount: $ownInBalance, \n${transaction.path.map { Config.tokens["0x" + it.toString(16)] }}")
+        println("\t Our in: $ownInBalance, our our: $minOut\n" +
+                "\t Their in: ${transaction.amountIn}, their out: ${transaction.minAmountOut}\n")
+
+        println("\t Path in: ${Config.tokens["0x" + inToken.toString(16)]}," +
+                " amount: $ownInBalance," +
+                " ${transaction.path.map { Config.tokens["0x" + it.toString(16)] }}")
 
         if (ownInBalance <= 0.toBigInteger()) return
 
@@ -95,38 +88,32 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
 
         if (minOut <= 0.toBigInteger()) throw Exception("Minout is zero")
 
-        println(transaction.gasPrice)
+        println("\t Transaction gas price: ${transaction.gasPrice}")
         val gasPrice = transaction.gasPrice.substring(2).toBigInteger(16) + 100000000.toBigInteger()
         val gasAmount = transaction.gasAmount.substring(2).toBigInteger(16) * 2.toBigInteger()
 
-        val trans = org.web3j.protocol.core.methods.request.Transaction(
-            Config.address,
-            null,
-            gasPrice,
-            null,
+        println("\t Input string: ${transaction.input}")
+        println("\t Pretty input attempt:\n${transaction.getPrettyInputString()}")
+        println("Executing Eth Call: ${Instant.now()}")
+
+        val result = transactionManager.sendTransaction(gasPrice,
+            gasAmount,
             transaction.contract,
-            0.toBigInteger(),
             transaction.input,
-        )
+            null)
 
-
-        println("input string: ${transaction.input}")
-
-        println("executing ethCall: ${Instant.now()}")
-
-
-//        val call = web3j.ethCall(trans, DefaultBlockParameter.valueOf("latest"))
-        val result = transactionManager.sendTransaction(gasPrice, gasAmount, transaction.contract, transaction.input, null)
-        println(result.error?.message)
-
+        println("Result message: ${result.error?.message}")
     }
+
 
     fun run() {
         webSocketService.connect()
+        println("Connected to web socket.")
         subscribeTransactions()
     }
 
-    fun Response<*>.getTransactionDetails(transactionHash: String): List<BaseTransaction> {
+
+    private fun Response<*>.getTransactionDetails(transactionHash: String): List<BaseTransaction> {
         val pending = (this.result as LinkedHashMap<*, *>)["pending"]
         val result = ArrayList<BaseTransaction>()
         for (pendingTransaction in (pending as LinkedHashMap<*, *>).values) {
@@ -142,9 +129,6 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
                     hash = transactionData["hash"] as String
                 ))
             } catch (e: Exception) {
-//                println(transactionData)
-//                println(e)
-//                e.printStackTrace()
                 continue
             }
         }
