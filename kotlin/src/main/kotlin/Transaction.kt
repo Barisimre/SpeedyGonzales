@@ -36,7 +36,7 @@ class Transaction(transaction: BaseTransaction) {
     fun replaceTo(to: String) {
         if (to.length > 64) throw Exception("Address $to does not have 64 characters")
         val inputString = to.padStart(64, '0')
-        input = input.substring(0, 10 + 2*64) + inputString + input.substring(10 + 3*64)
+        input = input.substring(0, 10 + 3*64) + inputString + input.substring(10 + 4*64)
     }
 
     fun replaceAmountIn(amountIn: BigInteger) {

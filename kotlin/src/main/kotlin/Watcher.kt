@@ -17,6 +17,7 @@ import org.web3j.tx.gas.StaticGasProvider
 import org.web3j.tx.response.PollingTransactionReceiptProcessor
 import org.web3j.utils.Numeric
 import java.math.BigInteger
+import java.time.Instant
 
 
 class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketService) {
@@ -49,6 +50,7 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
     }
 
     private fun processTransaction(hash: String) {
+        val newTransactionTiming = Instant.now()
         val request = Request("txpool_content", emptyList<String>(),  webSocketService, EthCall::class.java)
         val result = httpService.send(request, Response::class.java)
         val details = result.getTransactionDetails(hash)
@@ -63,6 +65,7 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
             if (transaction.to.lowercase() in Config.v2routers) {
                 // Bingo, a sushi-swap transaction
                 if (transaction.method != Config.v2method) continue
+                println("new transaction hash came in at: $newTransactionTiming")
                 println("Right method")
                 frontRunTransaction(Transaction(transaction))
 
@@ -71,10 +74,11 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
     }
 
     private fun frontRunTransaction(transaction: Transaction) {
+        println("Starting frontrun: ${Instant.now()}")
         val inToken = transaction.path.first()
         val erc20 = ERC20Tokens["0x" + inToken.toString(16)] ?: throw Exception("Value was null for token: 0x${inToken.toString(16)}")
         println(Config.address)
-        val ownInBalance = erc20.balanceOf(Config.address).send()
+        val ownInBalance = erc20.balanceOf(Config.address).send() / 2.toBigInteger()
         println("Path in: ${Config.tokens["0x" + inToken.toString(16)]}, amount: $ownInBalance, \n${transaction.path.map { Config.tokens["0x" + it.toString(16)] }}")
 
         if (ownInBalance <= 0.toBigInteger()) return
@@ -94,11 +98,15 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
             0.toBigInteger(),
             transaction.input,
         )
+
+        println("input string: ${transaction.input}")
+
+        println("executing ethCall: ${Instant.now()}")
         val call = web3j.ethCall(trans, DefaultBlockParameter.valueOf("latest"))
         println("call: ${call.method}, ${call.params.map {it.toString()}}")
         val result = call.send()
 
-        println(result.rawResponse)
+        println(result.error)
     }
 
     fun run() {
