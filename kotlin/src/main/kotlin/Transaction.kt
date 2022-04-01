@@ -51,11 +51,11 @@ class Transaction(transaction: BaseTransaction) {
     }
 
     fun getPrettyInputString(): String {
-        return "\t\t${method}\n" +
-                "\t\t${amountIn}\n" +
-                "\t\t${minAmountOut}\n" +
-                "\t\t${to}\n" +
-                "\t\t${deadline}\n" +
-                "\t\t$path"
+        var res = input.substring(0, 10)
+
+        for (i in 10 .. input.length step 64) {
+            res += "\n${input.substring(i, i+64)}"
+        }
+        return res
     }
 }

@@ -1,14 +1,15 @@
 
 
 object Config {
-    val rpc = "http://130.89.172.197:8545"
-    val wsrpc = "ws://130.89.172.197:8546"
-    val address = "0xD6A14bF0e77429b84F17eB7cB1ccBDc062Dfc2c1"
+    const val rpc = "http://130.89.172.197:8545"
+    const val wsrpc = "ws://130.89.172.197:8546"
+    const val ourAddress = "0xD6A14bF0e77429b84F17eB7cB1ccBDc062Dfc2c1"
     val v2routers = listOf(
         "0x1421bde4b10e8dd459b3bcb598810b1337d56842",
         "0xE3D8bd6Aed4F159bc8000a9cD47CffDb95F96121",
     ).map {it.lowercase()}
-    val v2method = "0x38ed1739"
+
+    const val v2method = "0x38ed1739"
 
     val tokens = mapOf (
         "0x471ece3750da237f93b8e339c536989b8978a438" to Currency.CELO,

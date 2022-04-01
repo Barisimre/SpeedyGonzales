@@ -7,12 +7,10 @@ import org.web3j.protocol.core.methods.response.EthCall
 import org.web3j.protocol.core.methods.response.EthSubscribe
 import org.web3j.protocol.http.HttpService
 import org.web3j.protocol.websocket.WebSocketService
-import org.web3j.protocol.websocket.events.NewHeadsNotification
 import org.web3j.protocol.websocket.events.PendingTransactionNotification
 import org.web3j.tx.FastRawTransactionManager
 import org.web3j.tx.gas.StaticGasProvider
 import org.web3j.tx.response.PollingTransactionReceiptProcessor
-import org.web3j.utils.Numeric
 import java.math.BigInteger
 import java.time.Instant
 
@@ -24,6 +22,8 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
     private val gasProvider = StaticGasProvider(BigInteger.valueOf(4_100_000_000L), BigInteger.valueOf(800_000)) // gasPrice, gasLimit
     private val transactionManager = FastRawTransactionManager(web3j, credentials, PollingTransactionReceiptProcessor(web3j,100, 150))
     private val ERC20Tokens = Config.tokens.map { it.key to ERC20.load(it.key, web3j, transactionManager, gasProvider) }.toMap()
+    private val totalBudgetRatio = 10.toBigInteger()
+    private val pessimisticMinOut = true
 
 
     private fun subscribeTransactions() {
@@ -70,8 +70,11 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
 
         val erc20 = ERC20Tokens["0x" + inToken.toString(16)] ?: throw Exception("Value was null for token: 0x${inToken.toString(16)}")
 
-        val ownInBalance = minOf(erc20.balanceOf(Config.address).send() / 2.toBigInteger(), transaction.amountIn)
-        val minOut = (ownInBalance * transaction.minAmountOut) / (transaction.amountIn)
+        val ownInBalance = minOf(erc20.balanceOf(Config.ourAddress).send() / totalBudgetRatio, transaction.amountIn)
+        var minOut = (ownInBalance * transaction.minAmountOut) / (transaction.amountIn)
+
+        // Give some pessimism to our minimum output. Optional
+        if (pessimisticMinOut) minOut = (999.toBigInteger()*minOut) / 1000.toBigInteger()
 
         println("\t Our in: $ownInBalance, our our: $minOut\n" +
                 "\t Their in: ${transaction.amountIn}, their out: ${transaction.minAmountOut}\n")
@@ -82,7 +85,9 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
 
         if (ownInBalance <= 0.toBigInteger()) return
 
-        transaction.replaceTo(Config.address.substring(2))
+        println("\t Their input string: ${transaction.getPrettyInputString()}")
+
+        transaction.replaceTo(Config.ourAddress.substring(2))
         transaction.replaceAmountIn(ownInBalance)
         transaction.replaceAmountOut(minOut)
 
@@ -92,8 +97,8 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
         val gasPrice = transaction.gasPrice.substring(2).toBigInteger(16) + 100000000.toBigInteger()
         val gasAmount = transaction.gasAmount.substring(2).toBigInteger(16) * 2.toBigInteger()
 
-        println("\t Input string: ${transaction.input}")
-        println("\t Pretty input attempt:\n${transaction.getPrettyInputString()}")
+        println("\t Our input string: ${transaction.getPrettyInputString()}")
+        println("...")
         println("Executing Eth Call: ${Instant.now()}")
 
         val result = transactionManager.sendTransaction(gasPrice,
@@ -103,6 +108,8 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
             null)
 
         println("Result message: ${result.error?.message}")
+
+        throw Exception()
     }
 
 
