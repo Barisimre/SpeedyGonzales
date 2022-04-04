@@ -25,6 +25,7 @@ object Config {
         "0x29dfce9c22003a4999930382fd00f9fd6133acd1" to Currency.SUSHI,
         "0xA649325Aa7C5093d12D6F98EB4378deAe68CE23F" to Currency.BNB,
         "0x88eec49252c8cbc039dcdb394c0c2ba2f1637ea0" to Currency.USDT,
+        "0xbaab46e28388d2779e6e31fd00cf0e5ad95e327b" to Currency.WBTC,
     ).map { it.key.lowercase() to it.value }.toMap()
 
     val allowedTargets = listOf(

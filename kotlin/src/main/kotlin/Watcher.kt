@@ -22,8 +22,7 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
     private val gasProvider = StaticGasProvider(BigInteger.valueOf(4_100_000_000L), BigInteger.valueOf(800_000)) // gasPrice, gasLimit
     private val transactionManager = FastRawTransactionManager(web3j, credentials, PollingTransactionReceiptProcessor(web3j,100, 150))
     private val ERC20Tokens = Config.tokens.map { it.key to ERC20.load(it.key, web3j, transactionManager, gasProvider) }.toMap()
-    private val totalBudgetRatio = 10.toBigInteger()
-    private val pessimisticMinOut = true
+    private val totalBudgetRatio = 1.toBigInteger()
 
 
     private fun subscribeTransactions() {
@@ -31,6 +30,16 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
         val events = webSocketService.subscribe(request, "eth_unsubscribe", PendingTransactionNotification::class.java)
         events.subscribe { event ->
             processTransaction(event.params.result)
+        }
+    }
+
+    private fun approveTokens() {
+        for (token in ERC20Tokens.values) {
+            for (router in Config.v2routers) {
+                if (token.allowance(Config.ourAddress, router).send() < 2.toBigInteger().pow(250)) {
+                    token.approve(router, 2.toBigInteger().pow(251)).send()
+                }
+            }
         }
     }
 
@@ -68,22 +77,41 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
         println("\tStarting frontrun: ${Instant.now()}\n")
         val inToken = transaction.path.first()
 
-        val erc20 = ERC20Tokens["0x" + inToken.toString(16)] ?: throw Exception("Value was null for token: 0x${inToken.toString(16)}")
+        val erc20 = ERC20Tokens[inToken]
+        if (erc20 == null) {
+            println("Unknown input token, cancelling: ${inToken}")
+            return
+        }
 
-        val ownInBalance = minOf(erc20.balanceOf(Config.ourAddress).send() / totalBudgetRatio, transaction.amountIn)
-        var minOut = (ownInBalance * transaction.minAmountOut) / (transaction.amountIn)
+        var ownInBalance = minOf(erc20.balanceOf(Config.ourAddress).send() / totalBudgetRatio, transaction.amountIn)
 
-        // Give some pessimism to our minimum output. Optional
-        if (pessimisticMinOut) minOut = (999.toBigInteger()*minOut) / 1000.toBigInteger()
+
+        println("\t Path in: ${Config.tokens[inToken]}," +
+                " ${transaction.path.map { Config.tokens[it] }}")
+
+        if (Config.tokens[inToken] == Currency.CELO) {
+            ownInBalance = (ownInBalance * 7.toBigInteger()) / 10.toBigInteger()
+            if (ownInBalance < 10.toBigInteger().pow(18)) {
+                println("Trying to trade amount less then 1 celo, cancelling")
+                return
+            }
+        }
+
+        val minOut = (999.toBigInteger() * ownInBalance * transaction.minAmountOut) / (transaction.amountIn * 1000.toBigInteger())
 
         println("\t Our in: $ownInBalance, our our: $minOut\n" +
                 "\t Their in: ${transaction.amountIn}, their out: ${transaction.minAmountOut}\n")
 
-        println("\t Path in: ${Config.tokens["0x" + inToken.toString(16)]}," +
-                " amount: $ownInBalance," +
-                " ${transaction.path.map { Config.tokens["0x" + it.toString(16)] }}")
 
-        if (ownInBalance <= 0.toBigInteger()) return
+        if (Config.tokens[transaction.path.last()] == null) {
+            println("Cancelling because of unknown out token: ${transaction.path.last()}")
+            return
+        }
+
+        if (ownInBalance <= 0.toBigInteger()) {
+            println("We do not own this token.")
+            return
+        }
 
         println("\t Their input string: ${transaction.getPrettyInputString()}")
 
@@ -91,10 +119,13 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
         transaction.replaceAmountIn(ownInBalance)
         transaction.replaceAmountOut(minOut)
 
-        if (minOut <= 0.toBigInteger()) throw Exception("Minout is zero")
+        if (minOut <= 0.toBigInteger()) {
+            println("Minout is zero")
+            return
+        }
 
         println("\t Transaction gas price: ${transaction.gasPrice}")
-        val gasPrice = transaction.gasPrice.substring(2).toBigInteger(16) + 100000000.toBigInteger()
+        val gasPrice = transaction.gasPrice.substring(2).toBigInteger(16) + 1.toBigInteger()
         val gasAmount = transaction.gasAmount.substring(2).toBigInteger(16) * 2.toBigInteger()
 
         println("\t Our input string: ${transaction.getPrettyInputString()}")
@@ -107,15 +138,14 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
             transaction.input,
             null)
 
-        println("Result message: ${result.error?.message}")
-
-        throw Exception()
+        println("Result message: ${result.transactionHash}")
+        println("")
     }
 
 
     fun run() {
         webSocketService.connect()
-        println("Connected to web socket.")
+        approveTokens()
         subscribeTransactions()
     }
 
@@ -143,3 +173,6 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
     }
 
 }
+
+
+

@@ -12,6 +12,7 @@ enum class Currency {
     SOL,
     BNB,
     USDT,
+    WBTC,
 
 }
 

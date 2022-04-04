@@ -32,7 +32,7 @@ class Transaction(transaction: BaseTransaction) {
         get() = BigInteger(body.substring(3*64, 4*64), 16)
 
     val path
-        get() = body.substring(startIndex = 6*64).chunked(64).map { BigInteger(it, 16) }
+        get() = body.substring(startIndex = 6*64).chunked(64).map {"0x" + it.toBigInteger(16).toString(16).padStart(40, '0')}
 
     fun replaceTo(to: String) {
         if (to.length > 64) throw Exception("Address $to does not have 64 characters")
@@ -53,7 +53,7 @@ class Transaction(transaction: BaseTransaction) {
     fun getPrettyInputString(): String {
         var res = input.substring(0, 10)
 
-        for (i in 10 .. input.length step 64) {
+        for (i in 10 until input.length step 64) {
             res += "\n${input.substring(i, i+64)}"
         }
         return res
