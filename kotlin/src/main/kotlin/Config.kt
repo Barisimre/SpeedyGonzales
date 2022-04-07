@@ -29,9 +29,7 @@ object Config {
     ).map { it.key.lowercase() to it.value }.toMap()
 
     val allowedTargets = listOf(
-        "0x9F034Dddd9c6464E827f648110dda4b6A3A42844",
-        "0xc7D252fdFAee7f3C06Ce676DcF68D0AA368DDc49",
-        "0x432963a481e1aa7f09e9ea878d4a596eee6eb63b",
+        "0x8ddc761Ae5Beaec6c9A42d129680663C1D0E81Fb",
     ).map { it.lowercase() }
 
 

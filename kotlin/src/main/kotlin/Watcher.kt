@@ -53,7 +53,7 @@ class Watcher(private val web3j: Web3j, private val webSocketService: WebSocketS
         for (transaction in details) {
 
             // Get rid of transactions that are not by the target addresses
-            if (transaction.from !in Config.allowedTargets) continue
+            if (transaction.from.lowercase() !in Config.allowedTargets) continue
 
             if (transaction.to.lowercase() in Config.v2routers) {
                 // Bingo, a sushi-swap transaction
